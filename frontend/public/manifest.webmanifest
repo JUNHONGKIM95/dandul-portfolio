@@ -11,19 +11,19 @@
   "theme_color": "#c75b65",
   "icons": [
     {
-      "src": "/dandul-app-icon-192-v1.png",
+      "src": "/dandul-pwa-icon-192-v2.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/dandul-app-icon-512-v1.png",
+      "src": "/dandul-pwa-icon-512-v2.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/dandul-favicon.svg",
+      "src": "/dandul-pwa-splash-v4.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
