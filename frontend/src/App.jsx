@@ -4459,6 +4459,10 @@ function MediaGrid({
   const [commentText, setCommentText] = useState('')
   const [editingCommentId, setEditingCommentId] = useState(null)
   const [editingCommentText, setEditingCommentText] = useState('')
+  const [swipeOffset, setSwipeOffset] = useState(0)
+  const [isSwiping, setIsSwiping] = useState(false)
+  const [slideAnimation, setSlideAnimation] = useState('')
+  const swipeRef = useRef({ active: false, horizontal: false, pointerId: null, startX: 0, startY: 0 })
   const [editForm, setEditForm] = useState({
     eventId: '',
     title: '',
@@ -4595,7 +4599,70 @@ function MediaGrid({
   const moveSelectedMedia = (amount) => {
     if (!hasMediaCarousel) return
     const nextIndex = (selectedMediaIndex + amount + items.length) % items.length
+    setSwipeOffset(0)
+    setIsSwiping(false)
+    setSlideAnimation(amount > 0 ? 'slide-in-next' : 'slide-in-previous')
     setSelectedMedia(items[nextIndex])
+  }
+
+  const startMediaSwipe = (event) => {
+    if (!hasMediaCarousel || (event.pointerType === 'mouse' && event.button !== 0)) return
+    swipeRef.current = {
+      active: true,
+      horizontal: false,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+    }
+  }
+
+  const moveMediaSwipe = (event) => {
+    const swipe = swipeRef.current
+    if (!swipe.active || swipe.pointerId !== event.pointerId) return
+
+    const deltaX = event.clientX - swipe.startX
+    const deltaY = event.clientY - swipe.startY
+    if (!swipe.horizontal) {
+      if (Math.abs(deltaX) < 8 && Math.abs(deltaY) < 8) return
+      if (Math.abs(deltaY) > Math.abs(deltaX)) {
+        swipe.active = false
+        return
+      }
+      swipe.horizontal = true
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+      setSlideAnimation('')
+      setIsSwiping(true)
+    }
+
+    event.preventDefault()
+    const limit = event.currentTarget.clientWidth * 0.42
+    setSwipeOffset(Math.max(-limit, Math.min(limit, deltaX)))
+  }
+
+  const finishMediaSwipe = (event) => {
+    const swipe = swipeRef.current
+    if (!swipe.active || swipe.pointerId !== event.pointerId) return
+
+    const deltaX = event.clientX - swipe.startX
+    const threshold = Math.min(96, Math.max(48, event.currentTarget.clientWidth * 0.14))
+    if (swipe.horizontal && Math.abs(deltaX) >= threshold) {
+      moveSelectedMedia(deltaX < 0 ? 1 : -1)
+    } else {
+      setSwipeOffset(0)
+      setIsSwiping(false)
+    }
+
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    swipeRef.current = { active: false, horizontal: false, pointerId: null, startX: 0, startY: 0 }
+  }
+
+  const cancelMediaSwipe = (event) => {
+    if (swipeRef.current.pointerId !== event.pointerId) return
+    setSwipeOffset(0)
+    setIsSwiping(false)
+    swipeRef.current = { active: false, horizontal: false, pointerId: null, startX: 0, startY: 0 }
   }
 
   const submitComment = (event) => {
@@ -4763,6 +4830,11 @@ function MediaGrid({
             aria-modal="true"
             aria-label={`${selectedMedia.title} 크게 보기`}
             onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.target instanceof HTMLElement && event.target.matches('input, textarea, select')) return
+              if (event.key === 'ArrowLeft') moveSelectedMedia(-1)
+              if (event.key === 'ArrowRight') moveSelectedMedia(1)
+            }}
           >
             <button
               type="button"
@@ -4772,26 +4844,6 @@ function MediaGrid({
             >
               <X size={20} />
             </button>
-            {hasMediaCarousel && (
-              <>
-                <button
-                  type="button"
-                  className="modal-carousel-button previous"
-                  onClick={() => moveSelectedMedia(-1)}
-                  aria-label="이전 추억 보기"
-                >
-                  <ChevronLeft size={24} />
-                </button>
-                <button
-                  type="button"
-                  className="modal-carousel-button next"
-                  onClick={() => moveSelectedMedia(1)}
-                  aria-label="다음 추억 보기"
-                >
-                  <ChevronRight size={24} />
-                </button>
-              </>
-            )}
             {selectedMedia.mediaType === 'PHOTO' && (
               <div className="modal-rotate-actions">
                 <button type="button" onClick={() => rotateMedia(selectedMedia, 270)}>
@@ -4804,24 +4856,51 @@ function MediaGrid({
                 </button>
               </div>
             )}
-            <div className="modal-media-stage">
-              {selectedMedia.mediaType === 'VIDEO' ? (
-                <video
-                  src={withCacheKey(selectedMedia.url, mediaCacheKey(selectedMedia))}
-                  controls
-                  controlsList="nodownload noplaybackrate"
-                  autoPlay
-                  onRateChange={(event) => {
-                    if (event.currentTarget.playbackRate !== 1) {
-                      event.currentTarget.playbackRate = 1
-                    }
-                  }}
-                />
-              ) : (
-                <img
-                  src={withCacheKey(selectedMedia.url, mediaCacheKey(selectedMedia))}
-                  alt={selectedMedia.title}
-                />
+            <div
+              className="modal-media-stage"
+              onPointerDown={startMediaSwipe}
+              onPointerMove={moveMediaSwipe}
+              onPointerUp={finishMediaSwipe}
+              onPointerCancel={cancelMediaSwipe}
+            >
+              <div
+                key={selectedMedia.id}
+                className={[
+                  'modal-media-slide',
+                  isSwiping ? 'dragging' : '',
+                  slideAnimation,
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                style={{ '--swipe-offset': `${swipeOffset}px` }}
+                onAnimationEnd={() => setSlideAnimation('')}
+              >
+                {selectedMedia.mediaType === 'VIDEO' ? (
+                  <video
+                    src={withCacheKey(selectedMedia.url, mediaCacheKey(selectedMedia))}
+                    controls
+                    controlsList="nodownload noplaybackrate"
+                    autoPlay
+                    onRateChange={(event) => {
+                      if (event.currentTarget.playbackRate !== 1) {
+                        event.currentTarget.playbackRate = 1
+                      }
+                    }}
+                  />
+                ) : (
+                  <img
+                    src={withCacheKey(selectedMedia.url, mediaCacheKey(selectedMedia))}
+                    alt={selectedMedia.title}
+                    draggable="false"
+                  />
+                )}
+              </div>
+              {hasMediaCarousel && (
+                <div key={selectedMedia.id} className="modal-swipe-cue" aria-hidden="true">
+                  <ChevronLeft size={14} />
+                  <span />
+                  <ChevronRight size={14} />
+                </div>
               )}
             </div>
             <div className="modal-media-info">
