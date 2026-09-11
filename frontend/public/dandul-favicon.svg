@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" rx="28" fill="#fff5f6"/>
+  <circle cx="104" cy="24" r="14" fill="#f6d8dd"/>
+  <circle cx="24" cy="104" r="18" fill="#f6d8dd"/>
+  <text
+    x="64"
+    y="57"
+    text-anchor="middle"
+    font-family="Rubik, Josefin Sans, Arial, sans-serif"
+    font-size="31"
+    font-weight="800"
+    letter-spacing="-1"
+    fill="#d87582"
+  >DAN</text>
+  <text
+    x="64"
+    y="91"
+    text-anchor="middle"
+    font-family="Rubik, Josefin Sans, Arial, sans-serif"
+    font-size="31"
+    font-weight="800"
+    letter-spacing="-1"
+    fill="#d87582"
+  >DUL</text>
+</svg>

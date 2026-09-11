@@ -1,0 +1,19 @@
+{
+  "name": "DANDUL",
+  "short_name": "DANDUL",
+  "description": "Junhong and Somin's private couple archive.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fff5f6",
+  "theme_color": "#c75b65",
+  "icons": [
+    {
+      "src": "/dandul-pwa-splash-v4.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
