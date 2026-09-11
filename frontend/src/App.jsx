@@ -186,6 +186,68 @@ function toDateInput(date) {
   return `${year}-${month}-${day}`
 }
 
+function emptyDateParts() {
+  return { year: '', month: '', day: '' }
+}
+
+function datePartsToInput(parts) {
+  if (!parts.year || !parts.month || !parts.day) return ''
+  return `${parts.year}-${parts.month.padStart(2, '0')}-${parts.day.padStart(2, '0')}`
+}
+
+function HikingDateSelect({ label, value, years, onChange }) {
+  const dayCount =
+    value.year && value.month
+      ? new Date(Number(value.year), Number(value.month), 0).getDate()
+      : 31
+
+  return (
+    <div className="hiking-date-select">
+      <span>{label}</span>
+      <div className="hiking-date-parts">
+        <select
+          value={value.year}
+          aria-label={`${label} 연도`}
+          onChange={(event) => onChange({ year: event.target.value, month: '', day: '' })}
+        >
+          <option value="">연도</option>
+          {years.map((year) => (
+            <option key={year} value={String(year)}>
+              {year}년
+            </option>
+          ))}
+        </select>
+        <select
+          value={value.month}
+          aria-label={`${label} 월`}
+          disabled={!value.year}
+          onChange={(event) => onChange({ ...value, month: event.target.value, day: '' })}
+        >
+          <option value="">월</option>
+          {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
+            <option key={month} value={String(month)}>
+              {month}월
+            </option>
+          ))}
+        </select>
+        <select
+          value={value.day}
+          aria-label={`${label} 일`}
+          disabled={!value.year || !value.month}
+          onChange={(event) => onChange({ ...value, day: event.target.value })}
+        >
+          <option value="">일</option>
+          {Array.from({ length: dayCount }, (_, index) => index + 1).map((day) => (
+            <option key={day} value={String(day)}>
+              {day}일
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  )
+}
+
 function todayInKorea() {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: KOREA_TIME_ZONE,
@@ -1105,7 +1167,6 @@ function App() {
         <div className="brand">
           <div className="brand-copy">
             <strong className="brand-name">DANDUL</strong>
-            <span className="brand-couple">준홍 ❤ 소민</span>
           </div>
           <div className="brand-actions">
             <span className={`user-badge user-badge-${currentUser.username}`}>
@@ -3104,7 +3165,7 @@ function HikingView({ records, currentUser, onAction }) {
   const [climbedAt, setClimbedAt] = useState(toDateInput(new Date()))
   const [memo, setMemo] = useState('')
   const [keyword, setKeyword] = useState('')
-  const [range, setRange] = useState({ start: '', end: '' })
+  const [range, setRange] = useState({ start: emptyDateParts(), end: emptyDateParts() })
   const [isHikingFormOpen, setIsHikingFormOpen] = useState(false)
   const [editingRecordId, setEditingRecordId] = useState(null)
   const [editForm, setEditForm] = useState(null)
@@ -3120,9 +3181,21 @@ function HikingView({ records, currentUser, onAction }) {
   const filteredMountains = bacMountains.filter((mountain) =>
     `${mountain.name} ${mountain.location}`.toLowerCase().includes(keyword.toLowerCase()),
   )
+  const rangeStart = datePartsToInput(range.start)
+  const rangeEnd = datePartsToInput(range.end)
+  const hasRangeSelection = Object.values(range.start).some(Boolean) || Object.values(range.end).some(Boolean)
+  const filterYears = useMemo(() => {
+    const currentYear = todayInKorea().getFullYear()
+    const recordYears = records
+      .map((record) => Number(record.climbedAt?.slice(0, 4)))
+      .filter(Number.isFinite)
+    const firstYear = Math.min(currentYear - 10, ...recordYears)
+    const lastYear = Math.max(currentYear + 1, ...recordYears)
+    return Array.from({ length: lastYear - firstYear + 1 }, (_, index) => lastYear - index)
+  }, [records])
   const filteredRecords = records.filter((record) => {
-    const afterStart = !range.start || record.climbedAt >= range.start
-    const beforeEnd = !range.end || record.climbedAt <= range.end
+    const afterStart = !rangeStart || record.climbedAt >= rangeStart
+    const beforeEnd = !rangeEnd || record.climbedAt <= rangeEnd
     return afterStart && beforeEnd
   })
   const previousMountains = useMemo(() => {
@@ -3135,9 +3208,11 @@ function HikingView({ records, currentUser, onAction }) {
     return [...mountainMap.values()]
   }, [records])
   const totalElevation = filteredRecords.reduce((sum, record) => sum + record.elevationMeter, 0)
-  const uniqueMountainCount = new Set(records.map((record) => normalizeMountainName(record.mountainName)).filter(Boolean)).size
+  const uniqueMountainCount = new Set(
+    filteredRecords.map((record) => normalizeMountainName(record.mountainName)).filter(Boolean),
+  ).size
   const completedBacIds = new Set(
-    records
+    filteredRecords
       .filter(isBacRecord)
       .map((record) => findBacMountainForRecord(record)?.id)
       .filter(Boolean),
@@ -3305,23 +3380,35 @@ function HikingView({ records, currentUser, onAction }) {
               <strong>{completedBacIds.size}/{bacMountains.length}</strong>
             </div>
           </div>
-          <div className="form-grid two">
-            <label>
-              시작일
-              <input
-                type="date"
+          <div className="hiking-period-filter">
+            <div className="hiking-period-toolbar">
+              <span className={hasRangeSelection ? 'hiking-period-status custom' : 'hiking-period-status'}>
+                {hasRangeSelection ? '선택기간' : '전체기간'}
+              </span>
+              <button
+                type="button"
+                className="ghost-button hiking-period-reset"
+                disabled={!hasRangeSelection}
+                onClick={() => setRange({ start: emptyDateParts(), end: emptyDateParts() })}
+              >
+                <RotateCcw size={14} />
+                <span>전체기간</span>
+              </button>
+            </div>
+            <div className="hiking-period-grid">
+              <HikingDateSelect
+                label="시작일"
                 value={range.start}
-                onChange={(event) => setRange({ ...range, start: event.target.value })}
+                years={filterYears}
+                onChange={(start) => setRange((current) => ({ ...current, start }))}
               />
-            </label>
-            <label>
-              종료일
-              <input
-                type="date"
+              <HikingDateSelect
+                label="종료일"
                 value={range.end}
-                onChange={(event) => setRange({ ...range, end: event.target.value })}
+                years={filterYears}
+                onChange={(end) => setRange((current) => ({ ...current, end }))}
               />
-            </label>
+            </div>
           </div>
         </div>
 
@@ -4864,7 +4951,7 @@ function MediaGrid({
               onPointerCancel={cancelMediaSwipe}
             >
               <div
-                key={selectedMedia.id}
+                key={`media-${selectedMedia.id}`}
                 className={[
                   'modal-media-slide',
                   isSwiping ? 'dragging' : '',
@@ -4896,7 +4983,7 @@ function MediaGrid({
                 )}
               </div>
               {hasMediaCarousel && (
-                <div key={selectedMedia.id} className="modal-swipe-cue" aria-hidden="true">
+                <div key={`cue-${selectedMedia.id}`} className="modal-swipe-cue" aria-hidden="true">
                   <ChevronLeft size={14} />
                   <span />
                   <ChevronRight size={14} />

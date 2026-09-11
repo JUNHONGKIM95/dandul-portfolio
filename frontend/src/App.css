@@ -1266,6 +1266,77 @@
   line-height: 1.1;
 }
 
+.hiking-period-filter {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.hiking-period-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.hiking-period-status {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: #eef1f5;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.hiking-period-status.custom {
+  background: #fde7eb;
+  color: #a34f5e;
+}
+
+.hiking-period-reset {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.hiking-period-reset:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.hiking-period-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.hiking-date-select {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.hiking-date-select > span {
+  color: #4d5968;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.hiking-date-parts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.hiking-date-parts select {
+  min-width: 0;
+  padding: 8px 6px;
+  font-size: 13px;
+}
+
 .mountain-selected-card strong {
   color: #1f2937;
 }
@@ -2706,6 +2777,8 @@ textarea {
 .modal-media-stage {
   position: relative;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, auto);
   place-items: center;
   overflow: hidden;
   max-height: min(72vh, 680px);
@@ -2713,6 +2786,8 @@ textarea {
   cursor: grab;
   touch-action: pan-y;
   user-select: none;
+  isolation: isolate;
+  contain: layout paint;
 }
 
 .modal-media-stage:active {
@@ -2720,9 +2795,12 @@ textarea {
 }
 
 .modal-media-slide {
+  grid-area: 1 / 1;
+  min-width: 0;
   width: 100%;
   display: grid;
   place-items: center;
+  overflow: hidden;
   transform: translate3d(var(--swipe-offset, 0), 0, 0);
   transition: transform 180ms ease-out;
   will-change: transform;
@@ -2742,6 +2820,7 @@ textarea {
 
 .modal-media-slide img,
 .modal-media-slide video {
+  display: block;
   width: auto;
   height: auto;
   max-width: 100%;
@@ -3140,6 +3219,10 @@ textarea {
 
   .topbar {
     align-items: flex-start;
+  }
+
+  .hiking-period-grid {
+    grid-template-columns: 1fr;
   }
 
   .nav-item span {
