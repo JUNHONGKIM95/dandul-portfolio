@@ -26,6 +26,13 @@ public class MediaCommentService {
 	}
 
 	@Transactional(readOnly = true)
+	public List<CommentResponse> findAllComments() {
+		return commentRepository.findAllByOrderByCreatedAtAsc().stream()
+				.map(this::toResponse)
+				.toList();
+	}
+
+	@Transactional(readOnly = true)
 	public List<CommentResponse> findComments(String mediaItemId) {
 		validateMedia(mediaItemId);
 		return commentRepository.findByMediaItemIdOrderByCreatedAtAsc(mediaItemId).stream()

@@ -575,6 +575,36 @@ async function request(path, options = {}) {
   return text ? JSON.parse(text) : null
 }
 
+const mediaCommentsCache = new Map()
+let mediaCommentsCacheLoaded = false
+let mediaCommentsCachePromise = null
+
+function cacheMediaComments(comments) {
+  mediaCommentsCache.clear()
+  comments.forEach((comment) => {
+    const mediaComments = mediaCommentsCache.get(comment.mediaItemId) || []
+    mediaComments.push(comment)
+    mediaCommentsCache.set(comment.mediaItemId, mediaComments)
+  })
+  mediaCommentsCacheLoaded = true
+}
+
+function preloadMediaComments() {
+  if (mediaCommentsCacheLoaded) return Promise.resolve(mediaCommentsCache)
+  if (!mediaCommentsCachePromise) {
+    mediaCommentsCachePromise = request('/api/media/comments')
+      .then((comments) => {
+        cacheMediaComments(comments)
+        return mediaCommentsCache
+      })
+      .catch((error) => {
+        mediaCommentsCachePromise = null
+        throw error
+      })
+  }
+  return mediaCommentsCachePromise
+}
+
 function isPushSupported() {
   return (
     typeof window !== 'undefined' &&
@@ -1033,32 +1063,6 @@ function App() {
     }
   }
 
-  const sendTestPushNotification = async () => {
-    setError('')
-    setStatus('')
-    try {
-      const result = await request('/api/push/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: currentUser.username }),
-      })
-      setPushSubscriptionCount(result.attempted ?? 0)
-      if (result.delivered > 0) {
-        setStatus('테스트 알림을 보냈어요.')
-        return
-      }
-      if (result.attempted < 1) {
-        setNotificationStatus('subscribed')
-        setError('준홍 알림 구독이 서버에 없어요. 알림 복구를 눌러주세요.')
-        return
-      }
-      const detail = Array.isArray(result.details) && result.details.length ? ` (${result.details[0]})` : ''
-      setError(`테스트 알림 전송에 실패했어요.${detail}`)
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
   const moveToView = (viewId) => {
     setActiveView(viewId)
     requestAnimationFrame(() => {
@@ -1119,11 +1123,6 @@ function App() {
                   : '알림 복구'
                 : '알림 켜기'}
             </button>
-            {notificationStatus === 'subscribed' && pushSubscriptionCount > 0 && (
-              <button type="button" className="brand-notification" onClick={sendTestPushNotification}>
-                테스트
-              </button>
-            )}
             <button type="button" className="brand-logout" onClick={logout}>
               로그아웃
             </button>
@@ -1840,6 +1839,7 @@ function HomeView({ profile, media, currentUser, onAction }) {
           items={recentFavorites}
           compact
           horizontal
+          showCardActions={false}
           currentUser={currentUser}
           onAction={onAction}
         />
@@ -4447,6 +4447,7 @@ function MediaGrid({
   compact = false,
   horizontal = false,
   instagram = false,
+  showCardActions = true,
   currentUser = DEFAULT_AUTHOR,
   openMediaId = null,
   onMediaDeepLinkOpened,
@@ -4466,6 +4467,10 @@ function MediaGrid({
   })
 
   useEffect(() => {
+    preloadMediaComments().catch(() => {})
+  }, [])
+
+  useEffect(() => {
     if (!openMediaId) return
     const deepLinkedMedia = items.find((item) => item.id === openMediaId)
     if (!deepLinkedMedia) return
@@ -4482,18 +4487,35 @@ function MediaGrid({
       return
     }
 
+    const mediaId = selectedMedia.id
+    const hasCachedSnapshot = mediaCommentsCacheLoaded
+    setComments(mediaCommentsCache.get(mediaId) || [])
+    setEditingCommentId(null)
+    setEditingCommentText('')
+
     let cancelled = false
-    request(`/api/media/${selectedMedia.id}/comments`)
-      .then((data) => {
-        if (!cancelled) {
-          setComments(data)
-          setEditingCommentId(null)
-          setEditingCommentText('')
+    const loadComments = async () => {
+      try {
+        let data
+        if (hasCachedSnapshot) {
+          data = await request(`/api/media/${mediaId}/comments`)
+          mediaCommentsCache.set(mediaId, data)
+        } else {
+          try {
+            await preloadMediaComments()
+            data = mediaCommentsCache.get(mediaId) || []
+          } catch {
+            data = await request(`/api/media/${mediaId}/comments`)
+            mediaCommentsCache.set(mediaId, data)
+          }
         }
-      })
-      .catch(() => {
-        if (!cancelled) setComments([])
-      })
+
+        if (!cancelled) setComments(data)
+      } catch {
+        if (!cancelled && !hasCachedSnapshot) setComments([])
+      }
+    }
+    loadComments()
 
     return () => {
       cancelled = true
@@ -4598,7 +4620,11 @@ function MediaGrid({
       return createdComment
     }).then((success) => {
       if (!success || !createdComment) return
-      setComments((current) => [...current, createdComment])
+      setComments((current) => {
+        const nextComments = [...current, createdComment]
+        mediaCommentsCache.set(mediaId, nextComments)
+        return nextComments
+      })
       setCommentText('')
     })
   }
@@ -4636,9 +4662,13 @@ function MediaGrid({
       return updatedComment
     }).then((success) => {
       if (!success || !updatedComment) return
-      setComments((current) =>
-        current.map((comment) => (comment.id === updatedComment.id ? updatedComment : comment)),
-      )
+      setComments((current) => {
+        const nextComments = current.map((comment) =>
+          comment.id === updatedComment.id ? updatedComment : comment,
+        )
+        mediaCommentsCache.set(mediaId, nextComments)
+        return nextComments
+      })
       cancelEditComment()
     })
   }
@@ -4653,7 +4683,11 @@ function MediaGrid({
       }),
     ).then((success) => {
       if (!success) return
-      setComments((current) => current.filter((item) => item.id !== comment.id))
+      setComments((current) => {
+        const nextComments = current.filter((item) => item.id !== comment.id)
+        mediaCommentsCache.set(mediaId, nextComments)
+        return nextComments
+      })
       if (editingCommentId === comment.id) cancelEditComment()
     })
   }
@@ -4701,16 +4735,18 @@ function MediaGrid({
               <span>{formatDate(item.capturedAt || item.eventDate)}</span>
               {item.memo && <p>{item.memo}</p>}
             </div>
-            <div className="media-actions">
-              <button type="button" className="ghost-button" onClick={() => openEditMedia(item)}>
-                <Pencil size={15} />
-                <span>수정</span>
-              </button>
-              <button type="button" className="text-danger" onClick={() => deleteMedia(item)}>
-                <Trash2 size={15} />
-                <span>삭제</span>
-              </button>
-            </div>
+            {showCardActions && (
+              <div className="media-actions">
+                <button type="button" className="ghost-button" onClick={() => openEditMedia(item)}>
+                  <Pencil size={15} />
+                  <span>수정</span>
+                </button>
+                <button type="button" className="text-danger" onClick={() => deleteMedia(item)}>
+                  <Trash2 size={15} />
+                  <span>삭제</span>
+                </button>
+              </div>
+            )}
           </article>
         ))}
       </div>

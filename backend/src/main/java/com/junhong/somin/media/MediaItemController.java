@@ -78,6 +78,11 @@ public class MediaItemController {
 		service.delete(id);
 	}
 
+	@GetMapping("/comments")
+	public List<CommentResponse> findAllComments() {
+		return commentService.findAllComments();
+	}
+
 	@GetMapping("/{id}/comments")
 	public List<CommentResponse> findComments(@PathVariable String id) {
 		return commentService.findComments(id);

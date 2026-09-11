@@ -1261,7 +1261,7 @@
 }
 
 .hiking-stats strong {
-  color: #247a84;
+  color: #d87582;
   font-size: 24px;
   line-height: 1.1;
 }
@@ -1321,8 +1321,8 @@
 
 .mountain-row.active,
 .mountain-row:hover {
-  border-color: #247a84;
-  background: #eefafa;
+  border-color: #d87582;
+  background: #fff1f4;
 }
 
 .mountain-row span,
@@ -1390,8 +1390,8 @@
   min-height: 22px;
   border-radius: 999px;
   padding: 3px 8px;
-  background: #e6f4f5;
-  color: #1f6871 !important;
+  background: #fde7eb;
+  color: #a34f5e !important;
   font-size: 11px !important;
   font-weight: 800;
 }
@@ -2354,6 +2354,11 @@ textarea {
   flex: 0 0 auto;
   min-height: 38px;
   color: #fff;
+  background: #d87582;
+}
+
+.album-upload-button:hover {
+  background: #c86371;
 }
 
 .album-upload-button span,
