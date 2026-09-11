@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Cropper from 'react-easy-crop'
 import {
   CalendarDays,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Clock,
   Film,
   Heart,
@@ -3167,6 +3169,8 @@ function HikingView({ records, currentUser, onAction }) {
   const [keyword, setKeyword] = useState('')
   const [range, setRange] = useState({ start: emptyDateParts(), end: emptyDateParts() })
   const [isHikingFormOpen, setIsHikingFormOpen] = useState(false)
+  const [isMapExpanded, setIsMapExpanded] = useState(false)
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false)
   const [editingRecordId, setEditingRecordId] = useState(null)
   const [editForm, setEditForm] = useState(null)
   const [customMountain, setCustomMountain] = useState({
@@ -3412,15 +3416,30 @@ function HikingView({ records, currentUser, onAction }) {
           </div>
         </div>
 
-        <div className="hiking-map-panel">
+        <div className={`hiking-map-panel hiking-collapsible-panel${isMapExpanded ? '' : ' collapsed'}`}>
           <div className="section-title">
             <h2>등산 지도</h2>
-            <span>{filteredRecords.filter(hasValidCoordinates).length}개</span>
+            <div className="section-actions">
+              <span>{filteredRecords.filter(hasValidCoordinates).length}개</span>
+              <button
+                type="button"
+                className="icon-only hiking-collapse-toggle"
+                onClick={() => setIsMapExpanded((expanded) => !expanded)}
+                aria-expanded={isMapExpanded}
+                aria-label={isMapExpanded ? '등산 지도 접기' : '등산 지도 펼치기'}
+              >
+                {isMapExpanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+              </button>
+            </div>
           </div>
-          <GoogleMountainMap records={filteredRecords} previewRecord={customPreviewRecord} />
+          {isMapExpanded && (
+            <div className="hiking-collapsible-content">
+              <GoogleMountainMap records={filteredRecords} previewRecord={customPreviewRecord} />
+            </div>
+          )}
         </div>
 
-        <div className="hiking-record-panel">
+        <div className={`hiking-record-panel hiking-collapsible-panel${isHistoryExpanded ? '' : ' collapsed'}`}>
           <div className="section-title">
             <h2>등산 이력</h2>
             <div className="section-actions">
@@ -3435,9 +3454,19 @@ function HikingView({ records, currentUser, onAction }) {
               >
                 <Plus size={17} />
               </button>
+              <button
+                type="button"
+                className="icon-only hiking-collapse-toggle"
+                onClick={() => setIsHistoryExpanded((expanded) => !expanded)}
+                aria-expanded={isHistoryExpanded}
+                aria-label={isHistoryExpanded ? '등산 이력 접기' : '등산 이력 펼치기'}
+              >
+                {isHistoryExpanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+              </button>
             </div>
           </div>
-          <div className="hiking-record-list">
+          {isHistoryExpanded && (
+            <div className="hiking-record-list hiking-collapsible-content">
             {filteredRecords.length === 0 ? (
               <div className="empty-state">
                 <Mountain size={28} />
@@ -3568,7 +3597,8 @@ function HikingView({ records, currentUser, onAction }) {
                 </article>
               ))
             )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 

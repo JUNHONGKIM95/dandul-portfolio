@@ -1225,6 +1225,45 @@
   margin-top: 12px;
 }
 
+.hiking-collapsible-panel.collapsed .section-title {
+  margin-bottom: 0;
+}
+
+.hiking-collapse-toggle {
+  flex: 0 0 auto;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.hiking-collapse-toggle:hover {
+  background: #f8e3e6;
+  color: #c65e6c;
+}
+
+.hiking-collapsible-content {
+  min-width: 0;
+  animation: hiking-content-reveal 180ms ease-out;
+}
+
+@keyframes hiking-content-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hiking-collapsible-content {
+    animation: none;
+  }
+}
+
 .hiking-form-modal {
   width: min(680px, 100%);
 }
