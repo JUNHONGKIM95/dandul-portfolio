@@ -4,8 +4,8 @@ self.addEventListener('push', (event) => {
     body: '새 알림이 도착했어요.',
     url: '/',
     tag: 'dandul-notification',
-    icon: '/dandul-favicon.svg',
-    badge: '/dandul-favicon.svg',
+    icon: '/dandul-app-icon-192-v1.png',
+    badge: '/dandul-app-icon-192-v1.png',
   }
 
   const data = event.data ? event.data.json() : fallback
