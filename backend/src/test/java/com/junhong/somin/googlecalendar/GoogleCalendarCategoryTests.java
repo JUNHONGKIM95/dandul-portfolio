@@ -264,6 +264,17 @@ class GoogleCalendarCategoryTests {
         assertThat(requests).noneMatch(r -> r.method().equals("PATCH"));
     }
 
+    @Test void explicitVisibilityChangeIsConfirmedAndPreservedBySubsequentSync() {
+        selected.put("junhong-calendar", true);
+        var result = service.setCalendarVisibility("junhong", "junhong", false);
+        assertThat(result.selected()).isFalse();
+        service.syncAll("junhong");
+        assertThat(service.calendarVisibility("junhong", "junhong").selected()).isFalse();
+        assertThat(requests.stream().filter(r -> r.method().equals("PATCH"))).hasSize(1);
+        assertThat(selected.get("somin-calendar")).isTrue();
+        assertThat(selected.get("existing-calendar")).isTrue();
+    }
+
     JsonNode body(HttpRequest request) throws Exception {
         var output = new java.io.ByteArrayOutputStream();
         var finished = new CountDownLatch(1);

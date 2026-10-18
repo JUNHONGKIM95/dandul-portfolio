@@ -9,6 +9,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -71,5 +72,16 @@ public class GoogleCalendarController {
 	@DeleteMapping("/connection")
 	public void disconnect(@RequestParam String username) {
 		service.disconnect(username);
+	}
+
+	@GetMapping("/calendar-visibility")
+	public GoogleCalendarDtos.CalendarVisibility visibility(@RequestParam String username, @RequestParam String category) {
+		return service.calendarVisibility(username, category);
+	}
+
+	@PatchMapping("/calendar-visibility")
+	public GoogleCalendarDtos.CalendarVisibility visibility(
+			@RequestParam String username, @RequestParam String category, @RequestParam boolean selected) {
+		return service.setCalendarVisibility(username, category, selected);
 	}
 }

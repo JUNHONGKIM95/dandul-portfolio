@@ -410,6 +410,40 @@ public class GoogleCalendarService {
 				errors);
 	}
 
+	public GoogleCalendarDtos.CalendarVisibility calendarVisibility(String username, String category) {
+		return calendarVisibility(username, category, null);
+	}
+
+	public GoogleCalendarDtos.CalendarVisibility setCalendarVisibility(String username, String category, boolean selected) {
+		return calendarVisibility(username, category, Boolean.valueOf(selected));
+	}
+
+	private GoogleCalendarDtos.CalendarVisibility calendarVisibility(String username, String category, Boolean selected) {
+		requireConfigured();
+		if (!List.of("together", "somin", "junhong").contains(category)) {
+			throw new IllegalArgumentException("일정 구분을 확인해 주세요.");
+		}
+		GoogleCalendarConnection connection = connectionRepository.findForSync(normalizeUsername(username))
+				.orElseThrow(() -> new IllegalStateException("먼저 Google Calendar를 연결해 주세요."));
+		requireCalendarAccess(connection);
+		String id = connection.calendarId(category);
+		if (id == null || id.isBlank()) throw new IllegalStateException("먼저 일정을 동기화해 주세요.");
+		String token = validAccessToken(connection);
+		String path = "/users/me/calendarList/" + encodePath(id);
+		if (selected != null) {
+			ApiResponse changed = calendarRequest("PATCH", path,
+					objectMapper.createObjectNode().put("selected", selected.booleanValue()), token);
+			if (!changed.success()) throw googleApiError(changed);
+		}
+		ApiResponse entry = calendarRequest("GET", path, null, token);
+		if (!entry.success()) throw googleApiError(entry);
+		boolean actual = entry.body().path("selected").asBoolean();
+		if (selected != null && actual != selected.booleanValue()) {
+			throw new IllegalStateException("Google 캘린더 표시 설정이 아직 반영되지 않았어요.");
+		}
+		return new GoogleCalendarDtos.CalendarVisibility(category, calendarName(category), actual);
+	}
+
 	public void disconnect(String username) {
 		String owner = normalizeUsername(username);
 		connectionRepository.findById(owner).ifPresent(connection -> {
