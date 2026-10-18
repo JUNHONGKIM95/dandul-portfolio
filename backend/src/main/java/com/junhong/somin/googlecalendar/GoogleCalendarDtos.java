@@ -27,8 +27,11 @@ public final class GoogleCalendarDtos {
 			int updated,
 			int deleted,
 			int failed,
-			List<String> errors) {
+			List<String> errors,
+			List<CalendarVisibility> calendars) {
 	}
+
+	public record CalendarVisibility(String category, String name, boolean selected) {}
 
 	public record ImportResponse(
 			int imported,

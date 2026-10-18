@@ -29,6 +29,12 @@ public class GoogleCalendarConnection {
 	@Column(length = 1024)
 	private String googleCalendarId;
 
+	@Column(length = 1024)
+	private String googleJunhongCalendarId;
+
+	@Column(length = 1024)
+	private String googleSominCalendarId;
+
 	@Column(length = 1000)
 	private String grantedScope;
 
@@ -111,5 +117,21 @@ public class GoogleCalendarConnection {
 
 	public void setGoogleCalendarId(String googleCalendarId) {
 		this.googleCalendarId = googleCalendarId;
+	}
+
+	public String calendarId(String category) {
+		return switch (category) {
+			case "junhong" -> googleJunhongCalendarId;
+			case "somin" -> googleSominCalendarId;
+			default -> googleCalendarId;
+		};
+	}
+
+	public void calendarId(String category, String id) {
+		switch (category) {
+			case "junhong" -> googleJunhongCalendarId = id;
+			case "somin" -> googleSominCalendarId = id;
+			default -> googleCalendarId = id;
+		}
 	}
 }

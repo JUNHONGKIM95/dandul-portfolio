@@ -57,8 +57,6 @@ public class GoogleCalendarService {
 	private static final String CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 	private static final String REQUIRED_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar";
 	private static final String DANDUL_CALENDAR_NAME = "DANDUL";
-	private static final String DANDUL_CALENDAR_COLOR = "#d87582";
-	private static final String DANDUL_CALENDAR_TEXT_COLOR = "#ffffff";
 	private static final ZoneId KOREA_ZONE = ZoneId.of("Asia/Seoul");
 	private static final Duration STATE_LIFETIME = Duration.ofMinutes(10);
 
@@ -107,7 +105,8 @@ public class GoogleCalendarService {
 				requiresReconnect,
 				owner,
 				connection.filter(value -> value.getGoogleCalendarId() != null)
-						.map(value -> DANDUL_CALENDAR_NAME)
+						.map(value -> value.calendarId("somin") != null && value.calendarId("junhong") != null
+								? "분류별 DANDUL" : DANDUL_CALENDAR_NAME)
 						.orElse(null),
 				connection.map(GoogleCalendarConnection::getConnectedAt).orElse(null),
 				message);
@@ -172,11 +171,11 @@ public class GoogleCalendarService {
 	public SyncResponse syncAll(String username) {
 		requireConfigured();
 		String owner = normalizeUsername(username);
-		GoogleCalendarConnection connection = connectionRepository.findById(owner)
+		GoogleCalendarConnection connection = connectionRepository.findForSync(owner)
 				.orElseThrow(() -> new IllegalStateException("먼저 Google Calendar를 연결해 주세요."));
 		requireCalendarAccess(connection);
 		String accessToken = validAccessToken(connection);
-		String calendarId = ensureDandulCalendar(connection, accessToken);
+		Map<String, String> calendars = ensureDandulCalendars(connection, accessToken);
 		List<DateEvent> events = eventRepository.findAllByOrderByDateAscMeetingTimeAsc();
 		Set<String> currentEventIds = new HashSet<>();
 		List<String> errors = new ArrayList<>();
@@ -187,7 +186,7 @@ public class GoogleCalendarService {
 		for (DateEvent event : events) {
 			currentEventIds.add(event.getId());
 			try {
-				UpsertResult result = upsertEvent(owner, event, calendarId, accessToken);
+				UpsertResult result = upsertEvent(owner, event, calendars.get(category(event)), accessToken);
 				if (result == UpsertResult.CREATED) {
 					created++;
 				} else {
@@ -220,119 +219,127 @@ public class GoogleCalendarService {
 			}
 		}
 
-		return new SyncResponse(events.size(), created, updated, deleted, errors.size(), errors);
-	}
-
-	public ImportResponse importEvents(String username) {
-		requireConfigured();
-		String owner = normalizeUsername(username);
-		GoogleCalendarConnection connection = connectionRepository.findById(owner)
-				.orElseThrow(() -> new IllegalStateException("먼저 Google Calendar를 연결해 주세요."));
-		requireCalendarAccess(connection);
-		String accessToken = validAccessToken(connection);
-		String calendarId = ensureDandulCalendar(connection, accessToken);
-		Map<String, GoogleCalendarEventLink> linksByGoogleEventId = new HashMap<>();
-		for (GoogleCalendarEventLink link
-				: linkRepository.findByUsernameAndGoogleCalendarId(owner, calendarId)) {
-			linksByGoogleEventId.put(link.getGoogleEventId(), link);
+		List<GoogleCalendarDtos.CalendarVisibility> visibility = new ArrayList<>();
+		for (var calendar : calendars.entrySet()) {
+			ApiResponse entry = calendarRequest("GET", "/users/me/calendarList/" + encodePath(calendar.getValue()), null, accessToken);
+			if (entry.success()) {
+				visibility.add(new GoogleCalendarDtos.CalendarVisibility(calendar.getKey(), calendarName(calendar.getKey()), entry.body().path("selected").asBoolean()));
+			} else {
+				errors.add("캘린더 표시 설정 확인: " + readableMessage(googleApiError(entry)));
+			}
 		}
-
-		List<String> errors = new ArrayList<>();
-		int imported = 0;
-		int updated = 0;
-		int deleted = 0;
-		int skipped = 0;
-		String pageToken = null;
-		do {
-			String path = googleEventsPath(calendarId, pageToken);
-			ApiResponse response = calendarRequest("GET", path, null, accessToken);
-			if (!response.success()) {
-				throw googleApiError(response);
-			}
-			JsonNode items = response.body().path("items");
-			if (items.isArray()) {
-				for (JsonNode googleEvent : items) {
-					String googleEventId = textOrNull(googleEvent, "id");
-					if (googleEventId == null) {
-						skipped++;
-						continue;
-					}
-					try {
-						GoogleCalendarEventLink link = linksByGoogleEventId.get(googleEventId);
-						if ("cancelled".equals(textOrNull(googleEvent, "status"))) {
-							if (link == null) {
-								skipped++;
-								continue;
-							}
-							if (eventRepository.existsById(link.getDateEventId())) {
-								eventRepository.deleteById(link.getDateEventId());
-								deleted++;
-							} else {
-								skipped++;
-							}
-							linkRepository.delete(link);
-							linksByGoogleEventId.remove(googleEventId);
-							continue;
-						}
-						String dandulEventId = googleEvent.path("extendedProperties")
-								.path("private").path("dandulEventId").asText(null);
-						if (link == null && dandulEventId != null && !dandulEventId.isBlank()) {
-							Optional<DateEvent> dandulEvent = eventRepository.findById(dandulEventId);
-							if (dandulEvent.isPresent()) {
-								link = linkRepository.save(new GoogleCalendarEventLink(
-										owner, dandulEventId, calendarId, googleEventId));
-								linksByGoogleEventId.put(googleEventId, link);
-							}
-						}
-						if (dandulEventId != null && !dandulEventId.isBlank()) {
-							skipped++;
-							continue;
-						}
-
-						GoogleEventValues values = googleEventValues(googleEvent);
-						if (link == null) {
-							DateEvent createdEvent = eventRepository.save(new DateEvent(
-									values.date(),
-									values.endDate(),
-									values.meetingTime(),
-									values.place(),
-									values.title(),
-									values.memo(),
-									"together",
-									owner,
-									nickname(owner)));
-							GoogleCalendarEventLink createdLink = linkRepository.save(
-									new GoogleCalendarEventLink(
-											owner, createdEvent.getId(), calendarId, googleEventId));
-							linksByGoogleEventId.put(googleEventId, createdLink);
-							imported++;
-							continue;
-						}
-
-						Optional<DateEvent> linkedEvent = eventRepository.findById(link.getDateEventId());
-						if (linkedEvent.isEmpty()) {
-							linkRepository.delete(link);
-							linksByGoogleEventId.remove(googleEventId);
-							skipped++;
-							continue;
-						}
-						if (applyGoogleValues(linkedEvent.get(), values)) {
-							updated++;
-						} else {
-							skipped++;
-						}
-					} catch (RuntimeException ex) {
-						String title = Optional.ofNullable(textOrNull(googleEvent, "summary"))
-								.orElse("Google 일정");
-						errors.add(title + ": " + readableMessage(ex));
-					}
-				}
-			}
-			pageToken = textOrNull(response.body(), "nextPageToken");
-		} while (pageToken != null && !pageToken.isBlank());
-
-		return new ImportResponse(imported, updated, deleted, skipped, errors.size(), errors);
+		return new SyncResponse(events.size(), created, updated, deleted, errors.size(), errors, visibility);
 	}
+
+    public ImportResponse importEvents(String username) {
+        requireConfigured();
+        String owner = normalizeUsername(username);
+        GoogleCalendarConnection connection = connectionRepository.findForSync(owner)
+                .orElseThrow(() -> new IllegalStateException("먼저 Google Calendar를 연결해 주세요."));
+        requireCalendarAccess(connection);
+        String token = validAccessToken(connection);
+        Map<String, String> calendars = ensureDandulCalendars(connection, token);
+        List<GoogleImportItem> incoming = new ArrayList<>();
+        for (var calendar : calendars.entrySet()) {
+            String page = null;
+            do {
+                ApiResponse response = calendarRequest("GET", googleEventsPath(calendar.getValue(), page), null, token);
+                if (!response.success()) throw googleApiError(response);
+                for (JsonNode item : response.body().path("items")) {
+                    incoming.add(new GoogleImportItem(calendar.getKey(), calendar.getValue(), item));
+                }
+                page = textOrNull(response.body(), "nextPageToken");
+            } while (page != null && !page.isBlank());
+        }
+        // A Google move leaves a cancellation in its old calendar. Handle live copies first.
+        incoming.sort(java.util.Comparator.comparing(i -> "cancelled".equals(textOrNull(i.event(), "status"))));
+        Map<String, GoogleCalendarEventLink> byPair = new HashMap<>();
+        Map<String, GoogleCalendarEventLink> byAppId = new HashMap<>();
+        Map<String, List<GoogleCalendarEventLink>> byGoogleId = new HashMap<>();
+        for (var link : linkRepository.findByUsername(owner)) {
+            byPair.put(link.getGoogleCalendarId() + ":" + link.getGoogleEventId(), link);
+            byAppId.put(link.getDateEventId(), link);
+            byGoogleId.computeIfAbsent(link.getGoogleEventId(), key -> new ArrayList<>()).add(link);
+        }
+        Set<String> cancelled = new HashSet<>();
+        Map<String, Integer> activeCounts = new HashMap<>();
+        for (var item : incoming) {
+            String id = textOrNull(item.event(), "id");
+            if ("cancelled".equals(textOrNull(item.event(), "status"))) cancelled.add(item.calendarId() + ":" + id);
+            else if (id != null) activeCounts.merge(id, 1, Integer::sum);
+        }
+        List<String> errors = new ArrayList<>();
+        int imported = 0, updated = 0, deleted = 0, skipped = 0;
+        for (var item : incoming) {
+            JsonNode googleEvent = item.event();
+            String id = textOrNull(googleEvent, "id");
+            if (id == null) { skipped++; continue; }
+            String key = item.calendarId() + ":" + id;
+            try {
+                GoogleCalendarEventLink link = byPair.get(key);
+                if ("cancelled".equals(textOrNull(googleEvent, "status"))) {
+                    if (link == null || !item.calendarId().equals(link.getGoogleCalendarId()) || !id.equals(link.getGoogleEventId())) {
+                        skipped++; continue;
+                    }
+                    if (eventRepository.existsById(link.getDateEventId())) {
+                        eventRepository.deleteById(link.getDateEventId());
+                        deleted++;
+                    } else skipped++;
+                    linkRepository.delete(link);
+                    byPair.remove(key);
+                    byAppId.remove(link.getDateEventId());
+                    continue;
+                }
+                String appId = googleEvent.path("extendedProperties").path("private").path("dandulEventId").asText(null);
+                if (link == null && appId != null) link = byAppId.get(appId);
+                if (link == null && activeCounts.getOrDefault(id, 0) == 1) {
+                    var candidates = byGoogleId.getOrDefault(id, List.of());
+                    if (candidates.size() == 1 && cancelled.contains(candidates.getFirst().getGoogleCalendarId() + ":" + id)) {
+                        link = candidates.getFirst();
+                    }
+                }
+                boolean moved = link != null && !item.calendarId().equals(link.getGoogleCalendarId());
+                if (moved) {
+                    link.moveTo(item.calendarId(), id);
+                    linkRepository.save(link);
+                    byPair.put(key, link);
+                }
+                if (appId != null && !appId.isBlank()) {
+                    Optional<DateEvent> event = eventRepository.findById(appId);
+                    if (event.isPresent() && link == null) {
+                        link = linkRepository.save(new GoogleCalendarEventLink(owner, appId, item.calendarId(), id));
+                        byPair.put(key, link);
+                        byAppId.put(appId, link);
+                    }
+                    if (moved && event.isPresent()) {
+                        event.get().setCategory(item.category());
+                        updated++;
+                    } else skipped++;
+                    continue;
+                }
+                GoogleEventValues values = googleEventValues(googleEvent);
+                if (link == null) {
+                    DateEvent event = eventRepository.save(new DateEvent(values.date(), values.endDate(), values.meetingTime(),
+                            values.place(), values.title(), values.memo(), item.category(), owner, nickname(owner)));
+                    link = linkRepository.save(new GoogleCalendarEventLink(owner, event.getId(), item.calendarId(), id));
+                    byPair.put(key, link);
+                    byAppId.put(event.getId(), link);
+                    imported++;
+                } else {
+                    Optional<DateEvent> event = eventRepository.findById(link.getDateEventId());
+                    if (event.isEmpty()) { linkRepository.delete(link); skipped++; continue; }
+                    boolean changed = applyGoogleValues(event.get(), values);
+                    if (moved) event.get().setCategory(item.category());
+                    if (changed || moved) updated++; else skipped++;
+                }
+            } catch (RuntimeException ex) {
+                errors.add(Optional.ofNullable(textOrNull(googleEvent, "summary")).orElse("Google 일정") + ": " + readableMessage(ex));
+            }
+        }
+        return new ImportResponse(imported, updated, deleted, skipped, errors.size(), errors);
+    }
+
+    private record GoogleImportItem(String category, String calendarId, JsonNode event) {}
 
 	public EventSyncResponse syncEventAcrossConnections(String eventId) {
 		if (eventId == null || eventId.isBlank()) {
@@ -343,7 +350,8 @@ public class GoogleCalendarService {
 		}
 
 		Optional<DateEvent> event = eventRepository.findById(eventId);
-		List<GoogleCalendarConnection> connections = connectionRepository.findAll();
+		List<GoogleCalendarConnection> connections = connectionRepository.findAll().stream()
+                .sorted(java.util.Comparator.comparing(GoogleCalendarConnection::getUsername)).toList();
 		List<String> errors = new ArrayList<>();
 		int created = 0;
 		int updated = 0;
@@ -357,9 +365,10 @@ public class GoogleCalendarService {
 				continue;
 			}
 			try {
+				connection = connectionRepository.findForSync(owner).orElseThrow();
 				String accessToken = validAccessToken(connection);
-				String calendarId = ensureDandulCalendar(connection, accessToken);
 				if (event.isPresent()) {
+					String calendarId = ensureDandulCalendar(connection, accessToken, category(event.get()));
 					UpsertResult result = upsertEvent(owner, event.get(), calendarId, accessToken);
 					if (result == UpsertResult.CREATED) {
 						created++;
@@ -421,97 +430,83 @@ public class GoogleCalendarService {
 		return base + "/?view=calendar&googleCalendar=" + encode(result);
 	}
 
-	private String ensureDandulCalendar(
-			GoogleCalendarConnection connection,
-			String accessToken) {
-		String savedCalendarId = connection.getGoogleCalendarId();
-		if (savedCalendarId != null && !savedCalendarId.isBlank()) {
-			ApiResponse savedCalendar = calendarRequest(
-					"GET",
-					"/calendars/" + encodePath(savedCalendarId),
-					null,
-					accessToken);
-			if (savedCalendar.success()) {
-				applyDandulCalendarColor(savedCalendarId, accessToken);
-				return savedCalendarId;
-			}
-			if (savedCalendar.statusCode() != 404 && savedCalendar.statusCode() != 410) {
-				throw googleApiError(savedCalendar);
-			}
-			connection.setGoogleCalendarId(null);
-		}
+	private String category(DateEvent event) {
+        return switch (Objects.toString(event.getCategory(), "")) {
+            case "junhong" -> "junhong";
+            case "somin" -> "somin";
+            default -> "together";
+        };
+    }
 
-		String calendarId = findDandulCalendar(accessToken);
-		if (calendarId == null) {
-			ObjectNode calendar = objectMapper.createObjectNode();
-			calendar.put("summary", DANDUL_CALENDAR_NAME);
-			calendar.put("description", "준홍과 소민의 DANDUL 일정");
-			calendar.put("timeZone", KOREA_ZONE.getId());
-			ApiResponse created = calendarRequest("POST", "/calendars", calendar, accessToken);
-			if (!created.success()) {
-				throw googleApiError(created);
-			}
-			calendarId = requiredText(created.body(), "id", "DANDUL 캘린더 ID를 받지 못했어요.");
-		}
+    private String calendarName(String category) {
+        return "DANDUL (" + switch (category) {
+            case "junhong" -> "준홍";
+            case "somin" -> "소민";
+            default -> "같이";
+        } + ")";
+    }
 
-		connection.setGoogleCalendarId(calendarId);
-		applyDandulCalendarColor(calendarId, accessToken);
-		return calendarId;
-	}
+    private Map<String, String> ensureDandulCalendars(GoogleCalendarConnection connection, String token) {
+        Map<String, String> result = new java.util.LinkedHashMap<>();
+        for (String category : List.of("together", "somin", "junhong")) {
+            result.put(category, ensureDandulCalendar(connection, token, category));
+        }
+        return result;
+    }
 
-	private String findDandulCalendar(String accessToken) {
-		ApiResponse response = calendarRequest(
-				"GET",
-				"/users/me/calendarList?maxResults=250&minAccessRole=owner",
-				null,
-				accessToken);
-		if (!response.success()) {
-			throw googleApiError(response);
-		}
-		JsonNode items = response.body().path("items");
-		if (!items.isArray()) {
-			return null;
-		}
-		for (JsonNode calendar : items) {
-			String summary = textOrNull(calendar, "summary");
-			String summaryOverride = textOrNull(calendar, "summaryOverride");
-			if (DANDUL_CALENDAR_NAME.equals(summary) || DANDUL_CALENDAR_NAME.equals(summaryOverride)) {
-				return textOrNull(calendar, "id");
-			}
-		}
-		return null;
-	}
+    private String ensureDandulCalendar(GoogleCalendarConnection connection, String token, String category) {
+        String name = calendarName(category);
+        String savedId = connection.calendarId(category);
+        if (savedId != null && !savedId.isBlank()) {
+            ApiResponse saved = calendarRequest("GET", "/calendars/" + encodePath(savedId), null, token);
+            if (saved.success() && !("together".equals(category)
+                    && DANDUL_CALENDAR_NAME.equals(textOrNull(saved.body(), "summary")))) {
+                // Existing preferences, including selected=false, are never overwritten.
+                return savedId;
+            }
+            if (!saved.success() && saved.statusCode() != 404 && saved.statusCode() != 410) throw googleApiError(saved);
+            connection.calendarId(category, null);
+        }
+        String id = findDandulCalendar(token, name);
+        if (id != null) {
+            connection.calendarId(category, id);
+            return ensureDandulCalendar(connection, token, category);
+        }
+        ObjectNode payload = objectMapper.createObjectNode().put("summary", name)
+                .put("description", "DANDUL의 " + name + " 일정").put("timeZone", KOREA_ZONE.getId());
+        ApiResponse created = calendarRequest("POST", "/calendars", payload, token);
+        if (!created.success()) throw googleApiError(created);
+        id = requiredText(created.body(), "id", "Google 캘린더 ID를 받지 못했어요.");
+        // Initial preferences only. Sync must not turn a calendar back on after the user hides it.
+        ObjectNode style = objectMapper.createObjectNode()
+                .put("backgroundColor", switch (category) {
+                    case "junhong" -> "#4986e7";
+                    case "somin" -> "#f691b2";
+                    default -> "#7bd148";
+                }).put("foregroundColor", "#000000")
+                .put("selected", !("junhong".equals(connection.getUsername()) && "junhong".equals(category)));
+        ApiResponse styled = calendarRequest("PATCH", "/users/me/calendarList/" + encodePath(id) + "?colorRgbFormat=true", style, token);
+        if (!styled.success()) throw googleApiError(styled);
+        connection.calendarId(category, id);
+        return id;
+    }
 
-	private void applyDandulCalendarColor(String calendarId, String accessToken) {
-		String entryPath = "/users/me/calendarList/" + encodePath(calendarId);
-		ApiResponse existing = calendarRequest("GET", entryPath, null, accessToken);
-		if (!existing.success()) {
-			throw googleApiError(existing);
-		}
-		// Repeated metadata writes have a separate Google quota. Most syncs only read.
-		JsonNode entry = existing.body();
-		String name = Optional.ofNullable(textOrNull(entry, "summaryOverride"))
-				.orElse(textOrNull(entry, "summary"));
-		if (DANDUL_CALENDAR_NAME.equals(name)
-				&& DANDUL_CALENDAR_COLOR.equalsIgnoreCase(entry.path("backgroundColor").asText())
-				&& DANDUL_CALENDAR_TEXT_COLOR.equalsIgnoreCase(entry.path("foregroundColor").asText())
-				&& entry.path("selected").asBoolean()) {
-			return;
-		}
-		ObjectNode color = objectMapper.createObjectNode();
-		color.put("summaryOverride", DANDUL_CALENDAR_NAME);
-		color.put("backgroundColor", DANDUL_CALENDAR_COLOR);
-		color.put("foregroundColor", DANDUL_CALENDAR_TEXT_COLOR);
-		color.put("selected", true);
-		ApiResponse response = calendarRequest(
-				"PATCH",
-				entryPath + "?colorRgbFormat=true",
-				color,
-				accessToken);
-		if (!response.success()) {
-			throw googleApiError(response);
-		}
-	}
+    private String findDandulCalendar(String token, String name) {
+        String page = null;
+        do {
+            String path = "/users/me/calendarList?maxResults=250&minAccessRole=owner";
+            if (page != null) path += "&pageToken=" + encode(page);
+            ApiResponse response = calendarRequest("GET", path, null, token);
+            if (!response.success()) throw googleApiError(response);
+            for (JsonNode calendar : response.body().path("items")) {
+                if (name.equals(textOrNull(calendar, "summary")) || name.equals(textOrNull(calendar, "summaryOverride"))) {
+                    return textOrNull(calendar, "id");
+                }
+            }
+            page = textOrNull(response.body(), "nextPageToken");
+        } while (page != null && !page.isBlank());
+        return null;
+    }
 
 	private UpsertResult upsertEvent(
 			String username,
@@ -523,18 +518,28 @@ public class GoogleCalendarService {
 				linkRepository.findByUsernameAndDateEventId(username, event.getId());
 		if (existingLink.isPresent()
 				&& !calendarId.equals(existingLink.get().getGoogleCalendarId())) {
-			ApiResponse deleteOld = calendarRequest(
-					"DELETE",
-					"/calendars/" + encodePath(existingLink.get().getGoogleCalendarId())
-							+ "/events/" + encodePath(existingLink.get().getGoogleEventId()),
-					null,
-					accessToken);
-			if (!deleteOld.success() && deleteOld.statusCode() != 404 && deleteOld.statusCode() != 410) {
-				throw googleApiError(deleteOld);
+			GoogleCalendarEventLink link = existingLink.get();
+			// Recover a previous move that succeeded at Google before the DB transaction committed.
+			String movedId = findExistingGoogleEvent(calendarId, event.getId(), accessToken);
+			if (movedId == null) {
+				ApiResponse move = calendarRequest("POST", "/calendars/" + encodePath(link.getGoogleCalendarId())
+						+ "/events/" + encodePath(link.getGoogleEventId()) + "/move?destination=" + encode(calendarId),
+						null, accessToken);
+				if (move.success()) {
+					movedId = requiredText(move.body(), "id", "이동한 Google 일정 ID를 받지 못했어요.");
+				} else if (move.statusCode() != 404 && move.statusCode() != 410) {
+					// Never delete the source event when a move fails.
+					throw googleApiError(move);
+				}
 			}
-			linkRepository.delete(existingLink.get());
-			linkRepository.flush();
-			existingLink = Optional.empty();
+			if (movedId != null) {
+				link.moveTo(calendarId, movedId);
+				linkRepository.saveAndFlush(link);
+			} else {
+				linkRepository.delete(link);
+				linkRepository.flush();
+				existingLink = Optional.empty();
+			}
 		}
 
 		if (existingLink.isPresent()) {
@@ -551,6 +556,7 @@ public class GoogleCalendarService {
 				throw googleApiError(update);
 			}
 			linkRepository.delete(existingLink.get());
+			linkRepository.flush();
 		}
 
 		String foundGoogleEventId = findExistingGoogleEvent(calendarId, event.getId(), accessToken);

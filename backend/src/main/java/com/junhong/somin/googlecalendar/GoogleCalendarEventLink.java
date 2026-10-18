@@ -77,4 +77,9 @@ public class GoogleCalendarEventLink {
 	public void updateGoogleEventId(String googleEventId) {
 		this.googleEventId = googleEventId;
 	}
+
+	public void moveTo(String calendarId, String eventId) {
+		this.googleCalendarId = calendarId;
+		this.googleEventId = eventId;
+	}
 }
