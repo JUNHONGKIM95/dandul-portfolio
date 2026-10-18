@@ -17,4 +17,9 @@ public class DailyMemoController {
     public DailyMemoService.TodayResponse add(@Valid @RequestBody MemoRequest request) {
         return service.add(request.createdBy(), request.content());
     }
+
+    @DeleteMapping("/{id}")
+    public DailyMemoService.TodayResponse delete(@PathVariable String id, @RequestParam String createdBy) {
+        return service.delete(id, createdBy);
+    }
 }

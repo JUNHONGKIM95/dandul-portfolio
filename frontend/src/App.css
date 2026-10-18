@@ -3396,7 +3396,12 @@ textarea {
 .daily-memo-panel .section-title > span { font-size: 11px; color: var(--muted, #8b7c80); }
 .daily-memo-list { max-height: 120px; overflow-y: auto; margin-bottom: 10px; }
 .daily-memo-list > .muted { margin: 4px 0 10px; font-size: 13px; }
-.daily-memo-item { display: grid; grid-template-columns: auto 38px minmax(0, 1fr); gap: 8px; align-items: baseline; padding: 5px 0; }
+.daily-memo-item { display: grid; grid-template-columns: auto 38px minmax(0, 1fr) 24px; gap: 8px; align-items: baseline; padding: 5px 0; }
+.daily-memo-item .user-badge { min-height: 24px; padding: 3px 9px; font-size: 12px; }
+.daily-memo-actions { display: flex; align-self: center; }
+.daily-memo-delete { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: #8b7c80; cursor: pointer; }
+.daily-memo-delete:hover { background: #ffe4ec; color: #b34a69; }
+.daily-memo-delete:disabled { opacity: 0.45; cursor: wait; }
 .daily-memo-item time { color: #8b7c80; font-size: 11px; }
 .daily-memo-item p { margin: 0; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .daily-memo-form { display: flex; gap: 8px; }

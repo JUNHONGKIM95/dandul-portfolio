@@ -40,6 +40,37 @@ class DailyMemoServiceTests {
         }
     }
 
+    @Test void returnsOldestFirstSoNewMessagesAppendAtTheBottom() {
+        var day = KoreaTime.today();
+        repository.save(new DailyMemo("junhong", "세 번째", day.atTime(12, 0)));
+        repository.save(new DailyMemo("somin", "첫 번째", day.atTime(9, 0)));
+        repository.save(new DailyMemo("junhong", "두 번째", day.atTime(10, 0)));
+        assertThat(service.today().notes()).extracting(DailyMemoService.MemoResponse::content)
+                .containsExactly("첫 번째", "두 번째", "세 번째");
+    }
+
+    @Test void authorCanDeleteOwnMemoAndOtherAuthorsMemoIsPreserved() {
+        var own = service.add("junhong", "내 글").notes().getFirst();
+        service.add("somin", "상대 글");
+        var result = service.delete(own.id(), "junhong");
+        assertThat(result.notes()).extracting(DailyMemoService.MemoResponse::content).containsExactly("상대 글");
+        assertThat(repository.existsById(own.id())).isFalse();
+    }
+
+    @Test void cannotDeleteAnotherAuthorsMemo() {
+        var note = service.add("somin", "소민의 글").notes().getFirst();
+        assertThatThrownBy(() -> service.delete(note.id(), "junhong"))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("본인이 작성한");
+        assertThat(repository.existsById(note.id())).isTrue();
+    }
+
+    @Test void deleteIsIdempotentWhenMidnightCleanupOrAnotherTabAlreadyRemovedMemo() {
+        var note = service.add("junhong", "내 글").notes().getFirst();
+        service.delete(note.id(), "junhong");
+        assertThat(service.delete(note.id(), "junhong").notes()).isEmpty();
+        assertThatThrownBy(() -> service.delete(note.id(), "unknown")).isInstanceOf(IllegalArgumentException.class);
+    }
+
     @Test void rejectsInvalidAuthorAndEmptyOrOversizedContent() {
         assertThatThrownBy(() -> service.add("unknown", "내용")).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.add("junhong", " ")).isInstanceOf(IllegalArgumentException.class);

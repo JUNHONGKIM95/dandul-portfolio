@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import Cropper from 'react-easy-crop'
 import {
   CalendarDays,
@@ -1869,8 +1869,10 @@ function DailyMemoSection({ currentUser }) {
   const [expired, setExpired] = useState(false)
   const [content, setContent] = useState('')
   const [saving, setSaving] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
   const [error, setError] = useState('')
   const requestVersion = useRef(0)
+  const listRef = useRef(null)
 
   const refresh = useCallback(async () => {
     const version = ++requestVersion.current
@@ -1912,7 +1914,7 @@ function DailyMemoSection({ currentUser }) {
 
   const save = async (event) => {
     event.preventDefault()
-    if (!content.trim() || saving) return
+    if (!content.trim() || saving || deletingId) return
     setSaving(true)
     ++requestVersion.current
     try {
@@ -1930,26 +1932,55 @@ function DailyMemoSection({ currentUser }) {
     }
   }
 
-  const notes = data && !expired ? data.notes : []
+  const removeMemo = async (note) => {
+    if (note.createdBy !== currentUser.username || saving || deletingId) return
+    setDeletingId(note.id)
+    ++requestVersion.current
+    try {
+      await request(`/api/memos/${encodeURIComponent(note.id)}?createdBy=${encodeURIComponent(currentUser.username)}`, { method: 'DELETE' })
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const notes = useMemo(() => data && !expired
+    ? [...data.notes].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+    : [], [data, expired])
+  const latestNoteId = notes.at(-1)?.id
+  useLayoutEffect(() => {
+    const list = listRef.current
+    if (list) list.scrollTop = list.scrollHeight
+  }, [latestNoteId])
   return (
     <section className="summary-panel daily-memo-panel" aria-label="소곤소곤💬">
       <div className="section-title">
         <h2>소곤소곤💬</h2>
         <span>매일 밤 12시 초기화 · 한국시간</span>
       </div>
-      <div className="daily-memo-list" aria-live="polite">
+      <div className="daily-memo-list" ref={listRef} aria-live="polite">
         {notes.length ? notes.map((note) => (
           <article className="daily-memo-item" key={note.id}>
-            <span className={authorBadgeClass(note)}>{note.creatorNickname}</span>
+            <span className={`user-badge user-badge-${note.createdBy}`}>{note.creatorNickname}</span>
             <time dateTime={`${note.createdAt}+09:00`}>{note.createdAt.slice(11, 16)}</time>
             <p>{note.content}</p>
+            <div className="daily-memo-actions">
+              {note.createdBy === currentUser.username && (
+                <button type="button" className="daily-memo-delete" aria-label="내 메모 삭제" title="메모 삭제"
+                  disabled={saving || deletingId !== null} onClick={() => removeMemo(note)}>
+                  <Trash2 size={13} />
+                </button>
+              )}
+            </div>
           </article>
         )) : <p className="muted">오늘 나누고 싶은 이야기를 남겨보세요.</p>}
       </div>
       <form className="daily-memo-form" onSubmit={save}>
         <input aria-label="메모 내용" value={content} maxLength={500}
           placeholder="짧은 메모를 남겨요" onChange={(event) => setContent(event.target.value)} disabled={saving} />
-        <button type="submit" disabled={saving || !content.trim()}>{saving ? '저장 중' : '남기기'}</button>
+        <button type="submit" disabled={saving || deletingId !== null || !content.trim()}>{saving ? '저장 중' : '남기기'}</button>
       </form>
       {error && <p className="daily-memo-error" role="alert">{error}</p>}
     </section>

@@ -19,7 +19,7 @@ public class DailyMemoService {
     @Transactional(readOnly = true)
     public TodayResponse today() {
         LocalDate day = KoreaTime.today();
-        var notes = repository.findByCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtDesc(
+        var notes = repository.findByCreatedAtGreaterThanEqualAndCreatedAtLessThanOrderByCreatedAtAscIdAsc(
                 day.atStartOfDay(), day.plusDays(1).atStartOfDay()).stream()
                 .map(m -> new MemoResponse(m.getId(), m.getCreatedBy(),
                         "junhong".equals(m.getCreatedBy()) ? "준홍" : "소민", m.getContent(), m.getCreatedAt())).toList();
@@ -31,6 +31,19 @@ public class DailyMemoService {
         if (!"junhong".equals(author) && !"somin".equals(author)) throw new IllegalArgumentException("작성자를 확인해 주세요.");
         if (content == null || content.isBlank() || content.length() > 500) throw new IllegalArgumentException("메모는 1~500자로 입력해 주세요.");
         repository.saveAndFlush(new DailyMemo(author, content.strip(), KoreaTime.now()));
+        return today();
+    }
+
+    @Transactional
+    public TodayResponse delete(String id, String author) {
+        if (!"junhong".equals(author) && !"somin".equals(author)) throw new IllegalArgumentException("작성자를 확인해 주세요.");
+        repository.findById(id).ifPresent(memo -> {
+            if (!author.equals(memo.getCreatedBy())) {
+                throw new IllegalArgumentException("본인이 작성한 메모만 삭제할 수 있어요.");
+            }
+            repository.delete(memo);
+        });
+        repository.flush();
         return today();
     }
 
