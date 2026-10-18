@@ -3373,3 +3373,17 @@ textarea {
     text-align: left;
   }
 }
+
+.daily-memo-panel { padding: 18px 22px; }
+.daily-memo-panel .section-title { margin-bottom: 10px; gap: 8px; flex-wrap: wrap; }
+.daily-memo-panel .section-title h2 { margin: 0; }
+.daily-memo-panel .section-title > span { font-size: 11px; color: var(--muted, #8b7c80); }
+.daily-memo-list { max-height: 120px; overflow-y: auto; margin-bottom: 10px; }
+.daily-memo-list > .muted { margin: 4px 0 10px; font-size: 13px; }
+.daily-memo-item { display: grid; grid-template-columns: auto 38px minmax(0, 1fr); gap: 8px; align-items: baseline; padding: 5px 0; }
+.daily-memo-item time { color: #8b7c80; font-size: 11px; }
+.daily-memo-item p { margin: 0; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.daily-memo-form { display: flex; gap: 8px; }
+.daily-memo-form input { flex: 1; min-width: 0; padding: 9px 12px; }
+.daily-memo-form button { flex-shrink: 0; padding: 9px 14px; border-radius: 12px; }
+.daily-memo-error { margin: 8px 0 0; color: #b33d55; font-size: 12px; }

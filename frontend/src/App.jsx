@@ -1864,6 +1864,98 @@ function LoginView({ onLogin }) {
   )
 }
 
+function DailyMemoSection({ currentUser }) {
+  const [data, setData] = useState(null)
+  const [expired, setExpired] = useState(false)
+  const [content, setContent] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const requestVersion = useRef(0)
+
+  const refresh = useCallback(async () => {
+    const version = ++requestVersion.current
+    try {
+      const result = await request('/api/memos')
+      if (requestVersion.current === version) {
+        setData(result)
+        setExpired(new Date(result.expiresAt).getTime() <= Date.now())
+        setError('')
+      }
+    } catch (err) {
+      if (requestVersion.current === version) setError(err.message)
+    }
+  }, [])
+
+  useEffect(() => {
+    const initial = window.setTimeout(refresh, 0)
+    const interval = window.setInterval(refresh, 15000)
+    const onVisible = () => { if (!document.hidden) void refresh() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.clearInterval(interval)
+      window.clearTimeout(initial)
+      document.removeEventListener('visibilitychange', onVisible)
+      requestVersion.current += 1
+    }
+  }, [refresh])
+
+  useEffect(() => {
+    if (!data?.expiresAt) return
+    const timer = window.setTimeout(() => {
+      setData(null)
+      setExpired(true)
+      setContent('')
+      void refresh()
+    }, Math.max(0, new Date(data.expiresAt).getTime() - Date.now()))
+    return () => window.clearTimeout(timer)
+  }, [data, refresh])
+
+  const save = async (event) => {
+    event.preventDefault()
+    if (!content.trim() || saving) return
+    setSaving(true)
+    ++requestVersion.current
+    try {
+      await request('/api/memos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ createdBy: currentUser.username, content: content.trim() }),
+      })
+      setContent('')
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const notes = data && !expired ? data.notes : []
+  return (
+    <section className="summary-panel daily-memo-panel" aria-label="오늘의 메모">
+      <div className="section-title">
+        <h2>오늘의 메모</h2>
+        <span>매일 밤 12시 초기화 · 한국시간</span>
+      </div>
+      <div className="daily-memo-list" aria-live="polite">
+        {notes.length ? notes.map((note) => (
+          <article className="daily-memo-item" key={note.id}>
+            <span className={authorBadgeClass(note)}>{note.creatorNickname}</span>
+            <time dateTime={`${note.createdAt}+09:00`}>{note.createdAt.slice(11, 16)}</time>
+            <p>{note.content}</p>
+          </article>
+        )) : <p className="muted">오늘 나누고 싶은 이야기를 남겨보세요.</p>}
+      </div>
+      <form className="daily-memo-form" onSubmit={save}>
+        <input aria-label="메모 내용" value={content} maxLength={500}
+          placeholder="짧은 메모를 남겨요" onChange={(event) => setContent(event.target.value)} disabled={saving} />
+        <button type="submit" disabled={saving || !content.trim()}>{saving ? '저장 중' : '남기기'}</button>
+      </form>
+      {error && <p className="daily-memo-error" role="alert">{error}</p>}
+    </section>
+  )
+}
+
 function HomeView({ profile, media, currentUser, onAction }) {
   const recentFavorites = [...media]
     .filter((item) => item.favorite)
@@ -1874,6 +1966,7 @@ function HomeView({ profile, media, currentUser, onAction }) {
 
   return (
     <section className="home-grid">
+      <DailyMemoSection currentUser={currentUser} />
       <div className="summary-panel">
         <h2>우리의 시간</h2>
         <strong className="dday">{daysTogether.toLocaleString('ko-KR')}일</strong>
@@ -1924,11 +2017,15 @@ function googleCalendarNeedsReconnect(message = '') {
 }
 
 function CalendarView({ events, currentUser, onRefresh, onAction }) {
+  const [initialDate] = useState(() => {
+    const date = new URLSearchParams(window.location.search).get('date')
+    return date && /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(date)) ? date : toDateInput(new Date())
+  })
   const [currentMonth, setCurrentMonth] = useState(() => {
-    const now = new Date()
+    const now = new Date(`${initialDate}T12:00:00`)
     return new Date(now.getFullYear(), now.getMonth(), 1)
   })
-  const [form, setForm] = useState(() => createEmptyEventForm())
+  const [form, setForm] = useState(() => createEmptyEventForm(initialDate))
   const [selectedDate, setSelectedDate] = useState(form.date)
   const [focusedEventId, setFocusedEventId] = useState(null)
   const [isDateModalOpen, setIsDateModalOpen] = useState(false)

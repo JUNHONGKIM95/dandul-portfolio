@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.junhong.somin.media.MediaComment;
 import com.junhong.somin.media.MediaItem;
+import com.junhong.somin.event.DateEvent;
 import com.junhong.somin.notification.PushDtos.SubscriptionStatusResponse;
 import com.junhong.somin.notification.PushDtos.SubscriptionRequest;
 import com.junhong.somin.notification.PushDtos.TestNotificationResponse;
@@ -152,6 +153,14 @@ public class PushNotificationService {
 		return sendWithResult(subscription, payload).delivered();
 	}
 
+	public boolean sendEventReminder(PushSubscription subscription, DateEvent event) {
+		String body = "%s · %s · %s에서 만나요".formatted(
+				event.getTitle(), event.getMeetingTime().toString(), event.getPlace());
+		return send(subscription, payload("단둘 · 약속 1시간 전이에요", body,
+				"/?view=calendar&date=" + event.getDate(),
+				"event-" + event.getId() + "-" + event.getDate() + "-" + event.getMeetingTime()));
+	}
+
 	private PushDeliveryResult sendWithResult(PushSubscription subscription, String payload) {
 		try {
 			PushService pushService = new PushService(publicKey, privateKey, subject);
@@ -191,8 +200,8 @@ public class PushNotificationService {
 					"body", body,
 					"url", url,
 					"tag", tag,
-					"icon", "/dandul-favicon.svg",
-					"badge", "/dandul-favicon.svg"));
+					"icon", "/dandul-pwa-icon-192-v2.png",
+					"badge", "/dandul-pwa-icon-192-v2.png"));
 		} catch (JsonProcessingException ex) {
 			throw new IllegalStateException("Unable to build push payload", ex);
 		}

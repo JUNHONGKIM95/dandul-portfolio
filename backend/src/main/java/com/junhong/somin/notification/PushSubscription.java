@@ -68,6 +68,8 @@ public class PushSubscription {
 		return username;
 	}
 
+	public String getId() { return id; }
+
 	public String getEndpoint() {
 		return endpoint;
 	}

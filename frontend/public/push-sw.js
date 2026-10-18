@@ -1,3 +1,6 @@
+self.addEventListener('install', () => self.skipWaiting())
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()))
+
 self.addEventListener('push', (event) => {
   const fallback = {
     title: 'DANDUL',
@@ -13,8 +16,8 @@ self.addEventListener('push', (event) => {
   const options = {
     body: data.body || fallback.body,
     tag: data.tag || fallback.tag,
-    icon: data.icon || fallback.icon,
-    badge: data.badge || fallback.badge,
+    icon: fallback.icon,
+    badge: fallback.badge,
     data: {
       url: data.url || fallback.url,
     },
