@@ -34,6 +34,7 @@ class GoogleCalendarCategoryTests {
     final ObjectMapper mapper = new ObjectMapper();
     final List<HttpRequest> requests = new ArrayList<>();
     GoogleCalendarService service;
+    boolean calendarAlreadyStyled;
 
     @BeforeEach void setup() throws Exception {
         service = new GoogleCalendarService(new GoogleCalendarProperties("client", "secret", "https://example.com/callback",
@@ -51,7 +52,11 @@ class GoogleCalendarCategoryTests {
                     @SuppressWarnings("unchecked")
                     HttpResponse<String> response = mock(HttpResponse.class);
                     when(response.statusCode()).thenReturn(200);
-                    when(response.body()).thenReturn(request.method().equals("POST") ? "{\"id\":\"created-google-event\"}" : "{\"items\":[]}");
+                    String body = request.method().equals("POST") ? "{\"id\":\"created-google-event\"}" : "{\"items\":[]}";
+                    if (calendarAlreadyStyled && request.method().equals("GET") && request.uri().getPath().contains("/users/me/calendarList/")) {
+                        body = "{\"summary\":\"DANDUL\",\"backgroundColor\":\"#d87582\",\"foregroundColor\":\"#ffffff\",\"selected\":true}";
+                    }
+                    when(response.body()).thenReturn(body);
                     return response;
                 });
     }
@@ -106,6 +111,19 @@ class GoogleCalendarCategoryTests {
         assertThat(payload.path("start").path("date").asText()).isEqualTo("2030-01-02");
         assertThat(payload.path("end").path("date").asText()).isEqualTo("2030-01-04");
         assertThat(payload.path("extendedProperties").path("private").path("dandulCategory").asText()).isEqualTo("together");
+    }
+
+    @Test void repeatedSyncDoesNotRewriteUnchangedCalendarSettings() {
+        calendarAlreadyStyled = true;
+        var event = event("together");
+        when(events.findAllByOrderByDateAscMeetingTimeAsc()).thenReturn(List.of(event));
+        var link = new GoogleCalendarEventLink("junhong", event.getId(), "existing-calendar", "existing-event");
+        when(links.findByUsernameAndDateEventId("junhong", event.getId())).thenReturn(Optional.of(link));
+        when(links.findByUsername("junhong")).thenReturn(List.of(link));
+        service.syncAll("junhong");
+        service.syncAll("junhong");
+        assertThat(requests).noneMatch(r -> r.method().equals("PATCH"));
+        assertThat(requests.stream().filter(r -> r.method().equals("PUT"))).hasSize(2);
     }
 
     JsonNode body(HttpRequest request) throws Exception {

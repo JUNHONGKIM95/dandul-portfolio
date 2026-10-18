@@ -483,6 +483,21 @@ public class GoogleCalendarService {
 	}
 
 	private void applyDandulCalendarColor(String calendarId, String accessToken) {
+		String entryPath = "/users/me/calendarList/" + encodePath(calendarId);
+		ApiResponse existing = calendarRequest("GET", entryPath, null, accessToken);
+		if (!existing.success()) {
+			throw googleApiError(existing);
+		}
+		// Repeated metadata writes have a separate Google quota. Most syncs only read.
+		JsonNode entry = existing.body();
+		String name = Optional.ofNullable(textOrNull(entry, "summaryOverride"))
+				.orElse(textOrNull(entry, "summary"));
+		if (DANDUL_CALENDAR_NAME.equals(name)
+				&& DANDUL_CALENDAR_COLOR.equalsIgnoreCase(entry.path("backgroundColor").asText())
+				&& DANDUL_CALENDAR_TEXT_COLOR.equalsIgnoreCase(entry.path("foregroundColor").asText())
+				&& entry.path("selected").asBoolean()) {
+			return;
+		}
 		ObjectNode color = objectMapper.createObjectNode();
 		color.put("summaryOverride", DANDUL_CALENDAR_NAME);
 		color.put("backgroundColor", DANDUL_CALENDAR_COLOR);
@@ -490,7 +505,7 @@ public class GoogleCalendarService {
 		color.put("selected", true);
 		ApiResponse response = calendarRequest(
 				"PATCH",
-				"/users/me/calendarList/" + encodePath(calendarId) + "?colorRgbFormat=true",
+				entryPath + "?colorRgbFormat=true",
 				color,
 				accessToken);
 		if (!response.success()) {
