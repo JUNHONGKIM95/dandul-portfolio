@@ -1079,7 +1079,7 @@ function App() {
     localStorage.removeItem(pushStorageKey(currentUser.username))
     setPushSubscriptionCount(0)
     setNotificationStatus('default')
-    setStatus('댓글 알림을 껐어요.')
+    setStatus('댓글·일정 알림을 껐어요.')
   }
 
   const togglePushNotifications = async () => {
@@ -1121,7 +1121,7 @@ function App() {
 
       localStorage.setItem(pushStorageKey(currentUser.username), 'true')
       setNotificationStatus('subscribed')
-      setStatus('댓글 알림을 받을 수 있어요.')
+      setStatus('댓글·일정 알림을 받을 수 있어요.')
     } catch (err) {
       setError(err.message)
     }

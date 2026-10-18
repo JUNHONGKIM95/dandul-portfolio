@@ -127,7 +127,7 @@ public class PushNotificationService {
 		String normalizedUsername = username(username);
 		String payload = payload(
 				"DANDUL 알림 테스트",
-				"댓글 알림을 받을 준비가 되었어요.",
+				"댓글·일정 알림을 받을 준비가 되었어요.",
 				"/",
 				"push-test-%s".formatted(normalizedUsername));
 		int delivered = 0;
