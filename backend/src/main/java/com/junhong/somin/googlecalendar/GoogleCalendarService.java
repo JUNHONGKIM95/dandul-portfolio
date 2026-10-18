@@ -591,14 +591,30 @@ public class GoogleCalendarService {
 
 	private ObjectNode eventPayload(DateEvent event) {
 		ObjectNode payload = objectMapper.createObjectNode();
-		payload.put("summary", event.getTitle());
+		String category = switch (Objects.toString(event.getCategory(), "")) {
+			case "junhong" -> "junhong";
+			case "somin" -> "somin";
+			default -> "together";
+		};
+		String categoryLabel = switch (category) {
+			case "junhong" -> "준홍";
+			case "somin" -> "소민";
+			default -> "같이";
+		};
+		// Keep one calendar and stable event IDs; category changes update the same event.
+		payload.put("summary", "[" + categoryLabel + "] " + event.getTitle());
+		payload.put("colorId", switch (category) {
+			case "junhong" -> "9";
+			case "somin" -> "4";
+			default -> "2";
+		});
 		if (event.getPlace() != null && !event.getPlace().isBlank() && !"장소 미정".equals(event.getPlace())) {
 			payload.put("location", event.getPlace());
 		}
 		String description = event.getMemo() == null || event.getMemo().isBlank()
 				? "DANDUL에서 동기화된 일정입니다."
 				: event.getMemo().strip() + "\n\nDANDUL에서 동기화된 일정입니다.";
-		payload.put("description", description);
+		payload.put("description", "일정 구분: " + categoryLabel + "\n\n" + description);
 
 		LocalDate endDate = event.getEndDate() == null || event.getEndDate().isBefore(event.getDate())
 				? event.getDate()
@@ -618,7 +634,8 @@ public class GoogleCalendarService {
 		}
 		payload.putObject("extendedProperties")
 				.putObject("private")
-				.put("dandulEventId", event.getId());
+				.put("dandulEventId", event.getId())
+				.put("dandulCategory", category);
 		payload.putObject("reminders").put("useDefault", true);
 		return payload;
 	}

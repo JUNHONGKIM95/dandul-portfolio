@@ -2590,6 +2590,13 @@ function CalendarView({ events, currentUser, onRefresh, onAction }) {
             )}
           </div>
         </div>
+        <div className="calendar-google-category-legend" aria-label="구글캘린더 일정 구분">
+          <span>구글캘린더에서도</span>
+          <span className="category-badge category-together">[같이] 초록</span>
+          <span className="category-badge category-junhong">[준홍] 파랑</span>
+          <span className="category-badge category-somin">[소민] 분홍</span>
+          <span>제목과 색상으로 구분돼요.</span>
+        </div>
         {googleCalendarMessage && (
           <div className="calendar-google-notice success" role="status">
             {googleCalendarMessage}

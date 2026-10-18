@@ -2359,6 +2359,22 @@ textarea {
   color: #2563a8 !important;
 }
 
+.calendar-google-category-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0;
+  font-size: 11px;
+  color: #80767a;
+}
+
+.calendar-google-category-legend .category-badge {
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
 .category-somin {
   background: #ffe4ec;
   color: #b34a69 !important;
