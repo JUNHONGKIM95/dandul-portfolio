@@ -1932,9 +1932,9 @@ function DailyMemoSection({ currentUser }) {
 
   const notes = data && !expired ? data.notes : []
   return (
-    <section className="summary-panel daily-memo-panel" aria-label="오늘의 메모">
+    <section className="summary-panel daily-memo-panel" aria-label="소곤소곤💬">
       <div className="section-title">
-        <h2>오늘의 메모</h2>
+        <h2>소곤소곤💬</h2>
         <span>매일 밤 12시 초기화 · 한국시간</span>
       </div>
       <div className="daily-memo-list" aria-live="polite">
